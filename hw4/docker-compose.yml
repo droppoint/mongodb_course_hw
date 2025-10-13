@@ -1,0 +1,155 @@
+services:
+
+  ######## MONGODB CONFIGDB ########
+
+  mongodb-configdb-replica0:
+    image: percona/percona-server-mongodb:8.0.12
+    command: ["mongod", "--configsvr", "--port", "27017", "--replSet", "cfg", "--keyFile", "/etc/secrets/keyfile"]
+    volumes:
+      - ./db/cfg-repl0:/data/configdb
+      - ./security/keyfile:/etc/secrets/keyfile:ro
+      - ./scripts/init-configserver.js:/scripts/init-configserver.js:ro
+    networks:
+      - mongo-cluster
+  
+  mongodb-configdb-replica1:
+    image: percona/percona-server-mongodb:8.0.12
+    command: ["mongod", "--configsvr", "--port", "27017", "--replSet", "cfg", "--keyFile", "/etc/secrets/keyfile"]
+    volumes:
+      - ./db/cfg-repl1:/data/configdb
+      - ./security/keyfile:/etc/secrets/keyfile:ro
+    networks:
+      - mongo-cluster
+
+  mongodb-configdb-replica2:
+    image: percona/percona-server-mongodb:8.0.12
+    command: ["mongod", "--configsvr", "--port", "27017", "--replSet", "cfg", "--keyFile", "/etc/secrets/keyfile"]
+    volumes:
+      - ./db/cfg-repl2:/data/configdb
+      - ./security/keyfile:/etc/secrets/keyfile:ro
+    networks:
+      - mongo-cluster
+
+  ######## MONGODB SHARD 0 ########
+  mongodb-shard0-replica0:
+    image: percona/percona-server-mongodb:8.0.12
+    command: ["mongod", "--shardsvr", "--replSet", "shard0", "--port", "27017", "--keyFile", "/etc/secrets/keyfile"]
+    volumes:
+      - ./db/shard0-repl0:/data/db
+      - ./security/keyfile:/etc/secrets/keyfile:ro
+      - ./scripts/init-shard0.js:/scripts/init-shard0.js:ro
+    networks:
+      - mongo-cluster
+
+  mongodb-shard0-replica1:
+    image: percona/percona-server-mongodb:8.0.12
+    command: ["mongod", "--shardsvr", "--replSet", "shard0", "--port", "27017", "--keyFile", "/etc/secrets/keyfile"]
+    volumes:
+      - ./db/shard0-repl1:/data/db
+      - ./security/keyfile:/etc/secrets/keyfile:ro
+    networks:
+      - mongo-cluster
+
+  mongodb-shard0-replica2:
+    image: percona/percona-server-mongodb:8.0.12
+    command: ["mongod", "--shardsvr", "--replSet", "shard0", "--port", "27017", "--keyFile", "/etc/secrets/keyfile"]
+    volumes:
+      - ./db/shard0-repl2:/data/db
+      - ./security/keyfile:/etc/secrets/keyfile:ro
+    networks:
+      - mongo-cluster
+
+
+  ######## MONGODB SHARD 1 ########
+
+  mongodb-shard1-replica0:
+    image: percona/percona-server-mongodb:8.0.12
+    command: ["mongod", "--shardsvr", "--replSet", "shard1", "--port", "27017", "--keyFile", "/etc/secrets/keyfile"]
+    volumes:
+      - ./db/shard1-repl0:/data/db
+      - ./security/keyfile:/etc/secrets/keyfile:ro
+      - ./scripts/init-shard1.js:/scripts/init-shard1.js:ro
+    networks:
+      - mongo-cluster
+
+  mongodb-shard1-replica1:
+    image: percona/percona-server-mongodb:8.0.12
+    command: ["mongod", "--shardsvr", "--replSet", "shard1", "--port", "27017", "--keyFile", "/etc/secrets/keyfile"]
+    volumes:
+      - ./db/shard1-repl1:/data/db
+      - ./security/keyfile:/etc/secrets/keyfile:ro
+    networks:
+      - mongo-cluster
+
+  mongodb-shard1-replica2:
+    image: percona/percona-server-mongodb:8.0.12
+    command: ["mongod", "--shardsvr", "--replSet", "shard1", "--port", "27017", "--keyFile", "/etc/secrets/keyfile"]
+    volumes:
+      - ./db/shard1-repl2:/data/db
+      - ./security/keyfile:/etc/secrets/keyfile:ro
+    networks:
+      - mongo-cluster
+
+  ######## MONGODB SHARD 2 ########
+
+  mongodb-shard2-replica0:
+    image: percona/percona-server-mongodb:8.0.12
+    command: ["mongod", "--shardsvr", "--replSet", "shard2", "--port", "27017", "--keyFile", "/etc/secrets/keyfile"]
+    volumes:
+      - ./db/shard2-repl0:/data/db
+      - ./security/keyfile:/etc/secrets/keyfile:ro
+      - ./scripts/init-shard2.js:/scripts/init-shard2.js:ro
+    networks:
+      - mongo-cluster
+
+  mongodb-shard2-replica1:
+    image: percona/percona-server-mongodb:8.0.12
+    command: ["mongod", "--shardsvr", "--replSet", "shard2", "--port", "27017", "--keyFile", "/etc/secrets/keyfile"]
+    volumes:
+      - ./db/shard2-repl1:/data/db
+      - ./security/keyfile:/etc/secrets/keyfile:ro
+    networks:
+      - mongo-cluster
+
+  mongodb-shard2-replica2:
+    image: percona/percona-server-mongodb:8.0.12
+    command: ["mongod", "--shardsvr", "--replSet", "shard2", "--port", "27017", "--keyFile", "/etc/secrets/keyfile"]
+    volumes:
+      - ./db/shard2-repl2:/data/db
+      - ./security/keyfile:/etc/secrets/keyfile:ro
+    networks:
+      - mongo-cluster
+
+  ######## MONGOS ########
+  mongos:
+    image: percona/percona-server-mongodb:8.0.12
+    depends_on:
+      - mongodb-configdb-replica0
+      - mongodb-configdb-replica1
+      - mongodb-configdb-replica2
+      - mongodb-shard0-replica0
+      - mongodb-shard0-replica1
+      - mongodb-shard0-replica2
+      - mongodb-shard1-replica0
+      - mongodb-shard1-replica1
+      - mongodb-shard1-replica2
+      - mongodb-shard2-replica0
+      - mongodb-shard2-replica1
+      - mongodb-shard2-replica2
+    command: >
+      mongos --configdb cfg/mongodb-configdb-replica0:27017,mongodb-configdb-replica1:27017,mongodb-configdb-replica2:27017
+      --port 27017 --bind_ip_all --keyFile /etc/secrets/keyfile
+    environment:
+      - MONGO_ROOT_USERNAME=${MONGO_ROOT_USERNAME}
+      - MONGO_ROOT_PASSWORD=${MONGO_ROOT_PASSWORD}
+    ports:
+      - 27017:27017
+    volumes:
+      - ./security/keyfile:/etc/secrets/keyfile:ro
+      - ./scripts/init-router.js:/scripts/init-router.js:ro
+      - ./scripts/create-admin.js:/scripts/create-admin.js:ro
+    networks:
+      - mongo-cluster
+
+networks:
+  mongo-cluster: {}
