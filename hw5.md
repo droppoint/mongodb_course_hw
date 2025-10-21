@@ -179,7 +179,7 @@ docker run -it --rm --name mongo-courses-importer -v ./pokemon.json:/pokemon.jso
 
 
 ## Удаление контейнера
-  ```bash
+```bash
 $ docker stop mongo-courses-server
 mongo-courses-server
 $ docker rm mongo-courses-server mongo-courses-importer

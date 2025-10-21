@@ -1,0 +1,261 @@
+services:
+
+  ######## MONGODB CONFIGDB ########
+
+  mongodb-configdb-replica0:
+    image: percona/percona-server-mongodb:8.0.12
+    command: ["mongod", "--configsvr", "--port", "27017", "--replSet", "cfg", "--keyFile", "/etc/secrets/keyfile"]
+    volumes:
+      - ./db/cfg-repl0:/data/configdb
+      - ./security/keyfile:/etc/secrets/keyfile:ro
+      - ./scripts/init-configserver.js:/scripts/init-configserver.js:ro
+    networks:
+      - mongo-cluster
+  
+  mongodb-configdb-replica1:
+    image: percona/percona-server-mongodb:8.0.12
+    command: ["mongod", "--configsvr", "--port", "27017", "--replSet", "cfg", "--keyFile", "/etc/secrets/keyfile"]
+    volumes:
+      - ./db/cfg-repl1:/data/configdb
+      - ./security/keyfile:/etc/secrets/keyfile:ro
+    networks:
+      - mongo-cluster
+
+  mongodb-configdb-replica2:
+    image: percona/percona-server-mongodb:8.0.12
+    command: ["mongod", "--configsvr", "--port", "27017", "--replSet", "cfg", "--keyFile", "/etc/secrets/keyfile"]
+    volumes:
+      - ./db/cfg-repl2:/data/configdb
+      - ./security/keyfile:/etc/secrets/keyfile:ro
+    networks:
+      - mongo-cluster
+
+  ######## MONGODB SHARD 0 ########
+  mongodb-shard0-replica0:
+    image: percona/percona-server-mongodb:8.0.12
+    command: ["mongod", "--shardsvr", "--replSet", "shard0", "--port", "27017", "--keyFile", "/etc/secrets/keyfile"]
+    environment:
+      - MONGO_ROOT_USERNAME=${MONGO_ROOT_USERNAME}
+      - MONGO_ROOT_PASSWORD=${MONGO_ROOT_PASSWORD}
+      - PBM_USERNAME=${PBM_USERNAME}
+      - PBM_PASSWORD=${PBM_PASSWORD}
+    volumes:
+      - ./db/shard0-repl0:/data/db
+      - ./security/keyfile:/etc/secrets/keyfile:ro
+      - ./scripts/init-shard0.js:/scripts/init-shard0.js:ro
+      - ./scripts/create-users.js:/scripts/create-users.js:ro
+    networks:
+      - mongo-cluster
+
+  mongodb-shard0-replica1:
+    image: percona/percona-server-mongodb:8.0.12
+    command: ["mongod", "--shardsvr", "--replSet", "shard0", "--port", "27017", "--keyFile", "/etc/secrets/keyfile"]
+    volumes:
+      - ./db/shard0-repl1:/data/db
+      - ./security/keyfile:/etc/secrets/keyfile:ro
+    networks:
+      - mongo-cluster
+
+  mongodb-shard0-replica2:
+    image: percona/percona-server-mongodb:8.0.12
+    command: ["mongod", "--shardsvr", "--replSet", "shard0", "--port", "27017", "--keyFile", "/etc/secrets/keyfile"]
+    volumes:
+      - ./db/shard0-repl2:/data/db
+      - ./security/keyfile:/etc/secrets/keyfile:ro
+    networks:
+      - mongo-cluster
+
+
+  ######## MONGODB SHARD 1 ########
+
+  mongodb-shard1-replica0:
+    image: percona/percona-server-mongodb:8.0.12
+    command: ["mongod", "--shardsvr", "--replSet", "shard1", "--port", "27017", "--keyFile", "/etc/secrets/keyfile"]
+    environment:
+      - MONGO_ROOT_USERNAME=${MONGO_ROOT_USERNAME}
+      - MONGO_ROOT_PASSWORD=${MONGO_ROOT_PASSWORD}
+      - PBM_USERNAME=${PBM_USERNAME}
+      - PBM_PASSWORD=${PBM_PASSWORD}
+    volumes:
+      - ./db/shard1-repl0:/data/db
+      - ./security/keyfile:/etc/secrets/keyfile:ro
+      - ./scripts/init-shard1.js:/scripts/init-shard1.js:ro
+      - ./scripts/create-users.js:/scripts/create-users.js:ro
+    networks:
+      - mongo-cluster
+
+  mongodb-shard1-replica1:
+    image: percona/percona-server-mongodb:8.0.12
+    command: ["mongod", "--shardsvr", "--replSet", "shard1", "--port", "27017", "--keyFile", "/etc/secrets/keyfile"]
+    volumes:
+      - ./db/shard1-repl1:/data/db
+      - ./security/keyfile:/etc/secrets/keyfile:ro
+    networks:
+      - mongo-cluster
+
+  mongodb-shard1-replica2:
+    image: percona/percona-server-mongodb:8.0.12
+    command: ["mongod", "--shardsvr", "--replSet", "shard1", "--port", "27017", "--keyFile", "/etc/secrets/keyfile"]
+    volumes:
+      - ./db/shard1-repl2:/data/db
+      - ./security/keyfile:/etc/secrets/keyfile:ro
+    networks:
+      - mongo-cluster
+
+  ######## MONGOS ########
+  mongos:
+    image: percona/percona-server-mongodb:8.0.12
+    depends_on:
+      - mongodb-configdb-replica0
+      - mongodb-configdb-replica1
+      - mongodb-configdb-replica2
+      - mongodb-shard0-replica0
+      - mongodb-shard0-replica1
+      - mongodb-shard0-replica2
+      - mongodb-shard1-replica0
+      - mongodb-shard1-replica1
+      - mongodb-shard1-replica2
+    command: >
+      mongos --configdb cfg/mongodb-configdb-replica0:27017,mongodb-configdb-replica1:27017,mongodb-configdb-replica2:27017
+      --port 27017 --bind_ip_all --keyFile /etc/secrets/keyfile
+    environment:
+      - MONGO_ROOT_USERNAME=${MONGO_ROOT_USERNAME}
+      - MONGO_ROOT_PASSWORD=${MONGO_ROOT_PASSWORD}
+      - PBM_USERNAME=${PBM_USERNAME}
+      - PBM_PASSWORD=${PBM_PASSWORD}
+    ports:
+      - 27017:27017
+    volumes:
+      - ./security/keyfile:/etc/secrets/keyfile:ro
+      - ./scripts/init-router.js:/scripts/init-router.js:ro
+      - ./scripts/create-users.js:/scripts/create-users.js:ro
+    networks:
+      - mongo-cluster
+
+  ######## MINIO (S3) ########
+  minio:
+    image: minio/minio:RELEASE.2025-09-07T16-13-09Z
+    command: server /data
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      - MINIO_ROOT_USER=${MINIO_ROOT_USER}
+      - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD}
+    volumes:
+      - ./backups:/data
+    networks:
+      - mongo-cluster
+
+  ######## PBM-AGENTS ########
+
+  pbm-agent-configdb-replica0:
+    image: percona/percona-backup-mongodb:2.11.0
+    environment:
+      PBM_MONGODB_URI: "mongodb://${PBM_USERNAME}:${PBM_PASSWORD}@mongodb-configdb-replica0:27017/?authSource=admin"
+    depends_on:
+      - mongos
+      - minio
+    volumes:
+      - ./security/keyfile:/etc/secrets/keyfile:ro
+      - ./pbm-config.yaml:/etc/pbm-config.yaml:ro
+    networks: [ mongo-cluster ]
+  
+  pbm-agent-configdb-replica1:
+    image: percona/percona-backup-mongodb:2.11.0
+    environment:
+      PBM_MONGODB_URI: "mongodb://${PBM_USERNAME}:${PBM_PASSWORD}@mongodb-configdb-replica1:27017/?authSource=admin"
+    depends_on:
+      - mongos
+      - minio
+    volumes:
+      - ./security/keyfile:/etc/secrets/keyfile:ro
+      - ./pbm-config.yaml:/etc/pbm-config.yaml:ro
+    networks: [ mongo-cluster ]
+
+  pbm-agent-configdb-replica2:
+    image: percona/percona-backup-mongodb:2.11.0
+    environment:
+      PBM_MONGODB_URI: "mongodb://${PBM_USERNAME}:${PBM_PASSWORD}@mongodb-configdb-replica0:27017/?authSource=admin"
+    depends_on:
+      - mongos
+      - minio
+    volumes:
+      - ./security/keyfile:/etc/secrets/keyfile:ro
+      - ./pbm-config.yaml:/etc/pbm-config.yaml:ro
+    networks: [ mongo-cluster ]
+
+  pbm-agent-shard0-replica0:
+    image: percona/percona-backup-mongodb:2.11.0
+    environment:
+      PBM_MONGODB_URI: "mongodb://${PBM_USERNAME}:${PBM_PASSWORD}@mongodb-shard0-replica0:27017/?authSource=admin"
+    depends_on:
+      - mongos
+      - minio
+    volumes:
+      - ./security/keyfile:/etc/secrets/keyfile:ro
+      - ./pbm-config.yaml:/etc/pbm-config.yaml:ro
+    networks: [ mongo-cluster ]
+  
+  pbm-agent-shard0-replica1:
+    image: percona/percona-backup-mongodb:2.11.0
+    environment:
+      PBM_MONGODB_URI: "mongodb://${PBM_USERNAME}:${PBM_PASSWORD}@mongodb-shard0-replica1:27017/?authSource=admin"
+    depends_on:
+      - mongos
+      - minio
+    volumes:
+      - ./security/keyfile:/etc/secrets/keyfile:ro
+      - ./pbm-config.yaml:/etc/pbm-config.yaml:ro
+    networks: [ mongo-cluster ]
+
+  pbm-agent-shard0-replica2:
+    image: percona/percona-backup-mongodb:2.11.0
+    environment:
+      PBM_MONGODB_URI: "mongodb://${PBM_USERNAME}:${PBM_PASSWORD}@mongodb-shard0-replica0:27017/?authSource=admin"
+    depends_on:
+      - mongos
+      - minio
+    volumes:
+      - ./security/keyfile:/etc/secrets/keyfile:ro
+      - ./pbm-config.yaml:/etc/pbm-config.yaml:ro
+    networks: [ mongo-cluster ]
+  
+  pbm-agent-shard1-replica0:
+    image: percona/percona-backup-mongodb:2.11.0
+    environment:
+      PBM_MONGODB_URI: "mongodb://${PBM_USERNAME}:${PBM_PASSWORD}@mongodb-shard1-replica0:27017/?authSource=admin"
+    depends_on:
+      - mongos
+      - minio
+    volumes:
+      - ./security/keyfile:/etc/secrets/keyfile:ro
+      - ./pbm-config.yaml:/etc/pbm-config.yaml:ro
+    networks: [ mongo-cluster ]
+  
+  pbm-agent-shard1-replica1:
+    image: percona/percona-backup-mongodb:2.11.0
+    environment:
+      PBM_MONGODB_URI: "mongodb://${PBM_USERNAME}:${PBM_PASSWORD}@mongodb-shard1-replica1:27017/?authSource=admin"
+    depends_on:
+      - mongos
+      - minio
+    volumes:
+      - ./security/keyfile:/etc/secrets/keyfile:ro
+      - ./pbm-config.yaml:/etc/pbm-config.yaml:ro
+    networks: [ mongo-cluster ]
+
+  pbm-agent-shard1-replica2:
+    image: percona/percona-backup-mongodb:2.11.0
+    environment:
+      PBM_MONGODB_URI: "mongodb://${PBM_USERNAME}:${PBM_PASSWORD}@mongodb-shard1-replica0:27017/?authSource=admin"
+    depends_on:
+      - mongos
+      - minio
+    volumes:
+      - ./security/keyfile:/etc/secrets/keyfile:ro
+      - ./pbm-config.yaml:/etc/pbm-config.yaml:ro
+    networks: [ mongo-cluster ]
+
+networks:
+  mongo-cluster: {}

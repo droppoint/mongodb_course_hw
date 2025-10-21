@@ -5,7 +5,7 @@
 # Запуск кластера будет осуществляться из папки hw4
 cd hw4
 mkdir security
-openssl rand -base64 1024 > security/keyfile
+openssl rand -base64 756 > security/keyfile
 chmod 400 security/keyfile
 ```
 
@@ -62,4 +62,10 @@ db.values.mapReduce(
     out: { inline: 1 }
   }
 );
+```
+
+## Удаление контейнеров и очистка
+```bash
+docker compose down --remove-orphans
+sudo rm -r db dump security stocks.zip
 ```

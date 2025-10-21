@@ -1,0 +1,14 @@
+storage:
+  type: s3
+  s3:
+    bucket: pbm-backups
+    endpointUrl: "http://minio:9000"
+    region: "us-east-1"
+    credentials:
+      access-key-id: "minioroot"
+      secret-access-key: "miniorootpassword"
+pitr:
+  enabled: true
+  oplogSpanMin: 10
+  compression: gzip
+  compressionLevel: 6
