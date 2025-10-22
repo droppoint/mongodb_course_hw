@@ -1,0 +1,108 @@
+services:
+
+  mongodb-rs0:
+    image: percona/percona-server-mongodb:8.0.12
+    ports:
+      - "27017:27017"  
+    command: ["mongod", "--port", "27017", "--replSet", "rs", "--bind_ip_all", "--keyFile", "/etc/secrets/keyfile", "--profile", "2", "--slowms", "200", "--rateLimit", "100"]
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD}
+    volumes:
+      - ./db/repl0:/data/db
+      - ./security/keyfile:/etc/secrets/keyfile:ro
+      - ./scripts/init-replicaset.js:/scripts/init-replicaset.js:ro
+    healthcheck:
+      test: ["CMD-SHELL", "mongosh --host localhost --port 27017 --username ${MONGO_INITDB_ROOT_USERNAME} --password ${MONGO_INITDB_ROOT_PASSWORD} --authenticationDatabase admin --eval 'db.getMongo()'"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    networks: [ mongo-cluster ]
+
+  mongodb-rs1:
+    image: percona/percona-server-mongodb:8.0.12
+    command: ["mongod", "--port", "27017", "--replSet", "rs", "--keyFile", "/etc/secrets/keyfile", "--profile", "2", "--slowms", "200", "--rateLimit", "100"]
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD}
+    volumes:
+      - ./db/repl1:/data/db
+      - ./security/keyfile:/etc/secrets/keyfile:ro
+    healthcheck:
+      test: ["CMD-SHELL", "mongosh --host localhost --port 27017 --username ${MONGO_INITDB_ROOT_USERNAME} --password ${MONGO_INITDB_ROOT_PASSWORD} --authenticationDatabase admin --eval 'db.getMongo()'"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    networks: [ mongo-cluster ]
+
+  mongodb-rs2:
+    image: percona/percona-server-mongodb:8.0.12
+    command: ["mongod", "--port", "27017", "--replSet", "rs", "--keyFile", "/etc/secrets/keyfile", "--profile", "2", "--slowms", "200", "--rateLimit", "100"]
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD}
+    volumes:
+      - ./db/repl2:/data/db
+      - ./security/keyfile:/etc/secrets/keyfile:ro
+    healthcheck:
+      test: ["CMD-SHELL", "mongosh --host localhost --port 27017 --username ${MONGO_INITDB_ROOT_USERNAME} --password ${MONGO_INITDB_ROOT_PASSWORD} --authenticationDatabase admin --eval 'db.getMongo()'"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    networks: [ mongo-cluster ]
+
+  pmm-server:
+    image: percona/pmm-server:3
+    container_name: pmm-server
+    ports:
+      - 8080:80
+      - 8443:8443
+    healthcheck: # Defines a command to check the container's health and sets the timing for executions and retries.
+      test: ["CMD-SHELL", "curl -k -f -L https://pmm-server:8443 > /dev/null 2>&1 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    networks: [ mongo-cluster ]
+  
+  pmm-client:
+    image: percona/pmm-client:3
+    container_name: pmm-client
+    depends_on:
+      pmm-server:
+        condition: service_healthy
+      mongodb-rs0:
+        condition: service_healthy
+      mongodb-rs1:
+        condition: service_healthy
+      mongodb-rs2:
+        condition: service_healthy
+    environment:
+      PMM_AGENT_SERVER_ADDRESS: pmm-server:8443
+      PMM_AGENT_SERVER_USERNAME: admin
+      PMM_AGENT_SERVER_PASSWORD: admin
+      PMM_AGENT_SERVER_INSECURE_TLS: 1
+      PMM_AGENT_CONFIG_FILE: config/pmm-agent.yaml
+      PMM_AGENT_SETUP: 1
+      PMM_AGENT_SETUP_FORCE: 1
+      PMM_AGENT_PRERUN_SCRIPT: >
+        pmm-admin status --wait=10s &&
+        pmm-admin add mongodb --service-name=mongodb-rs0 --username ${MONGO_INITDB_ROOT_USERNAME} --password ${MONGO_INITDB_ROOT_PASSWORD} --authentication-database=admin --host=mongodb-rs0 --port=27017 --query-source=profiler &&
+        pmm-admin add mongodb --service-name=mongodb-rs1 --username ${MONGO_INITDB_ROOT_USERNAME} --password ${MONGO_INITDB_ROOT_PASSWORD} --authentication-database=admin --host=mongodb-rs1 --port=27017 --query-source=profiler &&
+        pmm-admin add mongodb --service-name=mongodb-rs2 --username ${MONGO_INITDB_ROOT_USERNAME} --password ${MONGO_INITDB_ROOT_PASSWORD} --authentication-database=admin --host=mongodb-rs2 --port=27017 --query-source=profiler
+    networks: [ mongo-cluster ]
+
+  mongo-load:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    depends_on:
+      - mongodb-rs0
+      - mongodb-rs1
+      - mongodb-rs2
+    # не запускать автоматически
+    profiles: ["manual"]
+    command: ["-uri", "mongodb://${MONGO_INITDB_ROOT_USERNAME}:${MONGO_INITDB_ROOT_PASSWORD}@mongodb-rs0:27017,mongodb-rs1:27017,mongodb-rs2:27017/test?authSource=admin&replicaSet=rs", "-concurrency", "10", "-db", "test", "-coll", "values"]
+    networks: [ mongo-cluster ]
+
+networks:
+  mongo-cluster: {}
